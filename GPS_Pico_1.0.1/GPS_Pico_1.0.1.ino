@@ -694,6 +694,13 @@ void ReadSetpoints()
   fanTimeout = strtoul(fanTimeoutChar,&stopStr,10);
 }
 
+void ReadHTTPURL()
+{
+  String HTTPUrl;
+  HTTPUrl =  plowmanSD.ReadSetPointFromFile("HTTP.txt");
+  //testing
+}
+
 void WriteSetpoints(int setPointType, String value)
 {
   String fileName;
