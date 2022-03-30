@@ -8,7 +8,7 @@ float smallPigsTemperatureSetpoint = 27.0; // small pigs fan temperature set poi
 ///info_________________________________info///
 ///__Version Developed whilst at Huby____///
 /*
-v4.3. || 130921
+v4.3. || 130921  
 - Added delay after sending text: seems to carry on program before text is sent therefore
 further commands don't work. fix doesn't work.... 
 v4.4. 
@@ -126,6 +126,7 @@ Adafruit_FONA fona = Adafruit_FONA(FONA_RST); // Use this for FONA 800 and 808s
 int fonaNoReply = 0;
 bool gpsOn = false;
 bool gprsOn = false;
+bool sslOn = false;
 uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout = 0);
 uint8_t type;
 int gpsFixint;
@@ -174,6 +175,26 @@ bool piAlive = false;
 //_______________________________________________________________________________________________________________________________________________________________//
 //_______________________________________________________________________________________________________________________________________________________________//
 
+
+// serial testing for the fona
+void ATCommands()
+{
+  Serial.print(F("FONA> "));
+  while (! Serial.available() ) 
+  {
+    if (fona.available()) 
+    {
+      Serial.write(fona.read());
+    }
+  }
+}
+  char command = Serial.read();
+  Serial.println(command);
+
+
+//
+
+
 /**
  * @brief Initialise Fona 808 Module
  * Set network settings (i.e. for EE)
@@ -191,6 +212,9 @@ void InitialiseFona()
   //fona.setGPRSNetworkSettings(F("giffgaff.com"), F("giffgaff"), F(""));
   // EE 
   fona.setGPRSNetworkSettings(F("everywhere"), F("eesecure"), F("secure"));
+   // Turn on HTTPS redirect
+  fona.setHTTPSRedirect(true);
+  DebugPrint("HTTP Redirect = True");
 }
 
 /**
@@ -216,8 +240,8 @@ void InitialiseScreen()
  * @brief Attempt to turn on GPRS from Fona Module
  */
 void GPRSsetup()
-{
-  fona.HTTP_ssl(true); // Enable SSL 
+{ 
+  
   DebugPrint("GPRS Setup");
   if (!fona.enableGPRS(true))
   {
@@ -227,7 +251,11 @@ void GPRSsetup()
   }
   gprsOn = true;
   DebugPrint("GPRS Turned on");
+  
+
+
   delay(100);
+
 }
 
 /**
@@ -265,10 +293,13 @@ bool CheckAndPostToServer(String sqlMessage, bool gpsFix)
     //{
       if (gpsFix)
       {
-        char *url; //Define Url character
-        //Post current data to the server. If it fails, it will save the data to another file. 
-        GPRSPostSQL(sqlMessage, url = "https://plowmantelemetry.com/post/Redpath");
-        DebugPrint("Data successfully sent to the server!");
+        String HTTPUrl; //Define Url character
+        HTTPUrl = ReadHTTPURL();
+        char charUrl[150];
+        strcpy(charUrl, HTTPUrl.c_str());
+        GPRSPostSQL(sqlMessage, charUrl);
+        tftHTTPAddress(HTTPUrl);
+        
         // Then we check if we have any data to send. 
         if (CheckForDataToSend())
         {
@@ -283,8 +314,12 @@ bool CheckAndPostToServer(String sqlMessage, bool gpsFix)
       }
       else
       {
-        char *url; //Define Url character
-        GPRSPostSQL(sqlMessage, url = "http://18.170.89.178:8080/post/sql/v0_5_3");
+        String HTTPUrl; //Define Url character
+        HTTPUrl = ReadHTTPURL();
+        char charUrl[150];
+        strcpy(charUrl, HTTPUrl.c_str());
+        GPRSPostSQL(sqlMessage, charUrl);
+        tftHTTPAddress(HTTPUrl);
         return false; // we didn't bother using the function because no gps signal.
       }
     //}  
@@ -302,6 +337,23 @@ bool GPRSPostSQL(String sqlMessage, char *url)
   DebugPrint(gprsmessagechar);
   DebugPrint(String(fona.GPRSstate()));
   DebugPrint("Sending Data to Server");
+
+  // Check SSL is turned on
+  if (!fona.HTTP_ssl(true)) // Enable SSL 
+  {
+    DebugPrint("Failed to enable SSL");
+    tftSSL(false);
+    sslOn = false;
+  }
+  else
+  {
+    tftSSL(true);
+    sslOn = true;
+  }
+
+ 
+
+
   if (!fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) gprsmessagechar, strlen(gprsmessagechar), &statuscode, (uint16_t *)&length)) {
     DebugPrint("Failed to connect!");
     DebugPrint("Status Code: " + String(statuscode));
@@ -339,7 +391,7 @@ void GPRSStatusCodeAction(uint16_t statuscode)
 
     case 601:
       gprsOn = false;
-      DebugPrint("M62 Error?");
+      DebugPrint("Turning off GPRS");
       break;
       
     default:
@@ -423,6 +475,7 @@ float CalculateAverageTemperature(float *tArray)
 void ShouldWeTurnTheFansOn(float tAverage)
 {
   unsigned long fanTimeOn = millis() - fanStartTime;
+  String fanTimeOnSeconds = String(fanTimeOn/1000);
   DebugPrint("Time Fans are on:" + String(fanTimeOn));
   float fanTemperatureSetPoint = GetTemperatureSetPoint();
   if (fanTimeOn > fanTimeout) //if the fans have been on for more than 5mins e.g. enter this statement 
@@ -694,11 +747,11 @@ void ReadSetpoints()
   fanTimeout = strtoul(fanTimeoutChar,&stopStr,10);
 }
 
-void ReadHTTPURL()
+String ReadHTTPURL()
 {
   String HTTPUrl;
   HTTPUrl =  plowmanSD.ReadSetPointFromFile("HTTP.txt");
-  //testing
+  return HTTPUrl;
 }
 
 void WriteSetpoints(int setPointType, String value)
@@ -804,7 +857,6 @@ void tomDelay()
   for (int i = 0; i < 15; i++) 
   {
     // delay between readings
-    Serial.println(" . . . ");
     if (digitalRead(buttonSelect)==0 && digitalRead(buttonOK)==0)
     {
       SetpointSetup(); // we run the set point setup and try to edit things. 
@@ -926,11 +978,11 @@ void tftCancelSetpointEditor(String message)
 void tftSetScreen()
 {
   tft.invertDisplay(true);
-  tft.fillRect(0,100,tft.width(),(tft.height()-100),ST77XX_BLACK);
+  tft.fillRect(0,110,tft.width(),(tft.height()-100),ST77XX_BLACK);
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextWrap(true);
   tft.setTextSize(1);
-  tft.setCursor(0, 100);
+  tft.setCursor(0, 110);
 }
 
 void tftPrint(String data)
@@ -946,6 +998,23 @@ void tftGPS(bool onoff)
   int xpos = tft.width()-radius-1;
   int ypos = 7;
   String text = "GPS";
+  int textSize = 1;
+    if (onoff)
+  {
+    tft.fillCircle(xpos,ypos,radius, ST77XX_GREEN);
+  }
+  else
+  {
+    tft.fillCircle(xpos,ypos,radius, ST77XX_RED);
+  }  
+}
+
+void tftSSL(bool onoff)
+{
+  int radius = 5;
+  int xpos = tft.width() - radius - 1 ;
+  int ypos = 21;
+  String text = "SSL";
   int textSize = 1;
     if (onoff)
   {
@@ -1018,7 +1087,7 @@ void tftNetwork(int value)
 void tftSD(bool onoff)
 {
   int xpos = 0;
-  int ypos = 95;
+  int ypos = 105;
   tft.fillRect(xpos,ypos,140,2,ST77XX_BLACK);
   if (onoff)
   {
@@ -1133,6 +1202,25 @@ void tftFansOnOff()
   tft.setTextColor(ST77XX_WHITE);
   tft.println(text);
 }
+
+
+void tftHTTPAddress(String httpUrl)
+{
+  String text;
+  int xpos = 5;
+  int ypos = 85;
+  int textSize = 1;
+  text = "HTTP Address:" + httpUrl;
+  int ylength = textSize * 7 ;
+
+  tft.setCursor(xpos,ypos);
+  tft.fillRect(xpos,ypos,tft.width(),ylength,ST77XX_BLACK);
+  tft.setTextColor(ST77XX_WHITE);
+  tft.println(text);
+}
+
+
+
 
 
 /*
