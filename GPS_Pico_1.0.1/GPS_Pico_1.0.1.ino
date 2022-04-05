@@ -134,6 +134,7 @@ String message = "no data yet";
 String sqlData = "no SQL data yet";
 char smsmessage[150];
 char replybuffer[255];
+bool enableSSL = false;
 
 //SETUP **SD/SCREEN MODULE**
 File myFile;
@@ -189,7 +190,7 @@ void ATCommands()
   }
 }
   char command = Serial.read();
-  Serial.println(command);
+  //Serial.println(command);
 
 
 //
@@ -213,8 +214,11 @@ void InitialiseFona()
   // EE 
   fona.setGPRSNetworkSettings(F("everywhere"), F("eesecure"), F("secure"));
    // Turn on HTTPS redirect
-  fona.setHTTPSRedirect(true);
-  DebugPrint("HTTP Redirect = True");
+  if (enableSSL)
+  {
+    fona.setHTTPSRedirect(true);
+    DebugPrint("HTTP Redirect = True");
+  }
 }
 
 /**
@@ -339,16 +343,19 @@ bool GPRSPostSQL(String sqlMessage, char *url)
   DebugPrint("Sending Data to Server");
 
   // Check SSL is turned on
-  if (!fona.HTTP_ssl(true)) // Enable SSL 
+  if (enableSSL)
   {
-    DebugPrint("Failed to enable SSL");
-    tftSSL(false);
-    sslOn = false;
-  }
-  else
-  {
-    tftSSL(true);
-    sslOn = true;
+    if (!fona.HTTP_ssl(true)) // Enable SSL 
+    {
+      DebugPrint("Failed to enable SSL");
+      tftSSL(false);
+      sslOn = false;
+    }
+    else
+    {
+      tftSSL(true);
+      sslOn = true;
+    }
   }
 
  
@@ -1126,7 +1133,7 @@ tft.setTextColor(ST77XX_WHITE);
 
 void tftGprsStatus(uint16_t gprsStatus)
 {
-  int xpos = 10;
+  int xpos = 5;
   int ypos = 45;
   int textSize = 1;
   String text = "GPRS status : " + String(gprsStatus);
@@ -1210,7 +1217,7 @@ void tftHTTPAddress(String httpUrl)
   int xpos = 5;
   int ypos = 85;
   int textSize = 1;
-  text = "HTTP Address:" + httpUrl;
+  text = "URL: " + httpUrl;
   int ylength = textSize * 7 ;
 
   tft.setCursor(xpos,ypos);
