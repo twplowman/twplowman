@@ -1,6 +1,6 @@
 ///TPLOWMAN ADAFRUIT SIM808 GPS DATA PROGRAM///
-///VPico_1.0.0__________________________030122///
-String versionNumber = "pico v1.0.1";
+///VPico_2.0.0__________________________220422///
+String versionNumber = "pico v2.0.0";
 String livestockBoxNo = "PBL004";
 unsigned long fanTimeout = 300000; // 5 minute timout for fans
 float largePigsTemperatureSetpoint = 30.0; // large pigs fan temperature set point is 30 degrees. (Should be saved in SD)
@@ -73,6 +73,8 @@ V 1.0.1 || 090122
 - Now it always tries to post to the server, even if it thinks GPRS is turned off. If it succeeds to post, then GPRS changes back to true!
 - If we don't have GPS, we will also send data to the server (as a test - debug) Should be removerd for release 
 
+V 2.0.0 || 220422
+- Version for RedPath.
 
 To Do:  Reinitialise TFT Screen.
         Change the way data is posted to the server. 
