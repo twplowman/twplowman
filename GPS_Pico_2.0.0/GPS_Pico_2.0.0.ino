@@ -3,6 +3,7 @@
 String versionNumber = "pico v2.0.0";
 String livestockBoxNo = "PBL004";
 unsigned long fanTimeout = 300000; // 5 minute timout for fans
+unsigned long uploadInterval = 60000; // interval between uploads. Reset every time you get a Response code of 200 (Should be saved in SD in a future release.)
 float largePigsTemperatureSetpoint = 30.0; // large pigs fan temperature set point is 30 degrees. (Should be saved in SD)
 float smallPigsTemperatureSetpoint = 27.0; // small pigs fan temperature set point is 27 degrees. (Should be saved in SD)
 ///info_________________________________info///
@@ -75,6 +76,7 @@ V 1.0.1 || 090122
 
 V 2.0.0 || 220422
 - Version for RedPath.
+- Added interval for posting to server. Interval timer only resets if http response code is 200.
 
 To Do:  Reinitialise TFT Screen.
         Change the way data is posted to the server. 
@@ -168,6 +170,7 @@ bool newDebugSession;
 String uctTimeSD = "00000";
 String uctTime = "XX/XX/XXXX,XX:XX:XX"; 
 String sqlTime = "YYYY-MM-DD hh:mm:ss";
+unsigned long uploadIntervalStartTime = uploadInterval; // set as upload interval as a default. 
 
 #define piAlivePin 28 
 #define piOnPin 14
@@ -234,7 +237,7 @@ void InitialiseScreen()
   delay(500);
   tft.fillScreen(ST77XX_BLACK);
   delay(500);
-  tft.fillScreen(ST77XX_BLUE);
+  tft.fillScreen(ST77XX_RED);
   delay(500);
   tft.fillScreen(ST77XX_BLACK);
   tftSD(false);
@@ -290,14 +293,22 @@ void GPSsetup() //Turn on GPS
  */
 bool CheckAndPostToServer(String sqlMessage, bool gpsFix)
 {
-    if (!gprsOn) //Check if GPRS is turned on.
+    //1. Check if GPRS is turned on.
+    if (!gprsOn) 
     { 
       DebugPrint("Attempting to turn on GPRS"); 
       GPRSsetup();
     }
+    long uploadIntervalCurrentTime = millis() - uploadIntervalStartTime;
+    tftUploadInterval(uploadIntervalCurrentTime, uploadInterval);
+    //2. Check if we posted recently.
+    if (uploadIntervalCurrentTime < uploadInterval) //millis - uploadintervalstarttime = millis ... < interval, exit.
+    {
+      return false;
+    }
     //else // GPRS is probably turned on, so we will attempt to post to the server. 
     //{
-      if (gpsFix)
+      if (gpsFix) // post actual data
       {
         String HTTPUrl; //Define Url character
         HTTPUrl = ReadHTTPURL();
@@ -318,7 +329,7 @@ bool CheckAndPostToServer(String sqlMessage, bool gpsFix)
         
         return true; // we got to the end of the function.
       }
-      else
+      else // no GPS fix, but still post to the server... 
       {
         String HTTPUrl; //Define Url character
         HTTPUrl = ReadHTTPURL();
@@ -390,18 +401,23 @@ bool GPRSPostSQL(String sqlMessage, char *url)
   return true;
 }
 
+// What do we do based upon what happened
 void GPRSStatusCodeAction(uint16_t statuscode)
 {
   switch (statuscode)
   {
     case 200:
       gprsOn = true;
+      uploadIntervalStartTime = millis(); //reset the upload interval to currnt millis as we just posted successfully. 
       break;
 
     case 601:
       gprsOn = false;
       DebugPrint("Turning off GPRS");
       break;
+
+    //case 302: 
+    // temporary redirect. Out of credit?? 
       
     default:
       gprsOn = true; // Mostly GPRS is on and it may not have had signal to send. 
@@ -987,11 +1003,11 @@ void tftCancelSetpointEditor(String message)
 void tftSetScreen()
 {
   tft.invertDisplay(true);
-  tft.fillRect(0,110,tft.width(),(tft.height()-100),ST77XX_BLACK);
+  tft.fillRect(0,180,tft.width(),(tft.height()-30),ST77XX_BLACK);
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextWrap(true);
   tft.setTextSize(1);
-  tft.setCursor(0, 110);
+  tft.setCursor(0, 180);
 }
 
 void tftPrint(String data)
@@ -1096,15 +1112,15 @@ void tftNetwork(int value)
 void tftSD(bool onoff)
 {
   int xpos = 0;
-  int ypos = 105;
-  tft.fillRect(xpos,ypos,140,2,ST77XX_BLACK);
+  int ypos = 175;
+  tft.fillRect(xpos,ypos,tft.width(),2,ST77XX_BLACK);
   if (onoff)
   {
-    tft.fillRect(xpos,ypos,140,1,ST77XX_GREEN);
+    tft.fillRect(xpos,ypos,tft.width(),1,ST77XX_GREEN);
   }
   else
   {
-    tft.fillRect(xpos,ypos,140,2,ST77XX_RED);
+    tft.fillRect(xpos,ypos,tft.width(),2,ST77XX_RED);
   }
 }
 
@@ -1146,7 +1162,8 @@ void tftGprsStatus(uint16_t gprsStatus)
   tft.setTextColor(ST77XX_WHITE);
   if (gprsStatus == 200)
   {
-    tft.fillRect(0,ypos,tft.width(),ylength,ST77XX_GREEN);
+  
+    tft.fillRect(tft.width()/2,ypos,tft.width(),ylength,ST77XX_GREEN);
   }
   tft.println(text);
 }
@@ -1228,6 +1245,20 @@ void tftHTTPAddress(String httpUrl)
   tft.println(text);
 }
 
+void tftUploadInterval(long uploadIntervalCurrentTime, long uploadInterval)
+{
+  String text;
+  int xpos = 5;
+  int ypos = 95;
+  int textSize = 1;
+  text = "Interval: " + String(uploadIntervalCurrentTime/1000) + "  || Current: " + String(uploadInterval/1000) ;
+  int ylength = textSize * 7 ;
+
+  tft.setCursor(xpos,ypos);
+  tft.fillRect(xpos,ypos,tft.width(),ylength,ST77XX_BLACK);
+  tft.setTextColor(ST77XX_WHITE);
+  tft.println(text);
+}
 
 
 
