@@ -1,6 +1,6 @@
 {
     "board": "arduino:mbed_rp2040:pico",
     "programmer": "arduino:cmsis-dap",
-    "sketch": "GPS_Pico_2.0.0/GPS_Pico_2.0.0.ino",
+    "sketch": "Sensor_Testing_0.1/Sensor_Testing_0.1.ino",
     "port": "/dev/tty.usbmodem14301"
 }
